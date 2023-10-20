@@ -1,0 +1,67 @@
+import logging
+import aiogram
+import aiogram.utils.markdown as md
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Command
+from aiogram.types import ParseMode
+
+import psycopg2
+import asyncio
+
+API_TOKEN = 'YOUR_API_TOKEN'
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
+logging.basicConfig(level=logging.INFO)
+
+# Класс, представляющий состояния для авторизации
+class AuthStates(StatesGroup):
+waiting_for_contract_number = State() # Ожидание номера договора
+waiting_for_password = State() # Ожидание пароля
+
+# Класс для работы с базой данных PostgreSQL
+class Database:
+def __init__(self, conn_string):
+self.conn_string = conn_string
+
+def connect(self):
+return psycopg2.connect(self.conn_string)
+
+# Функция для проверки авторизации
+async def check_auth(user_id, contract_number, password):
+# Здесь вы можете добавить код для проверки номера договора и пароля в базе данных
+# Если номер договора и пароль совпадают, верните True, в противном случае верните False
+return True
+
+# Обработчик команды /start
+@dp.message_handler(Command("start"))
+async def cmd_start(message: types.Message):
+await message.answer("Привет! Для начала работы, введите номер договора.")
+await AuthStates.waiting_for_contract_number.set()
+
+# Обработчик ввода номера договора
+@dp.message_handler(state=AuthStates.waiting_for_contract_number)
+async def process_contract_number(message: types.Message, state: FSMContext):
+async with state.proxy() as data:
+data['contract_number'] = message.text
+await AuthStates.next()
+await message.reply("Отлично! Теперь введите пароль.")
+
+# Обработчик ввода пароля
+@dp.message_handler(state=AuthStates.waiting_for_password)
+async def process_password(message: types.Message, state: FSMContext):
+async with state.proxy() as data:
+data['password'] = message.text
+
+if await check_auth(message.from_user.id, data['contract_number'], data['password']):
+await state.finish()
+await message.reply("Вы успешно авторизовались!")
+else:
+await message.reply("Авторизация не удалась. Пожалуйста, проверьте номер договора и пароль.")
+
+if __name__ == '__main__':
+from aiogram import executor
+conn_string = "your_postgresql_connection_string"
+db = Database(conn_string)
+executor.start_polling(dp, skip_updates=True)
